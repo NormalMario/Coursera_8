@@ -1,0 +1,121 @@
+---
+title: "Activity Quality"
+author: "Mario G."
+date: "17 06 2017"
+output:
+  html_document:
+    number_sections: yes
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE, cache=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+setwd('Q:/Organisation/Privat/Giesel_Mario/XXX_R/Coursera/Kurs8')
+library(caret)
+library(funModeling)
+#library(rattle)
+library(randomForest)
+library(RGtk2)
+```
+# Note
+
+Unfortunately an HTML conversion was not possible due to a cryptical error.
+Same with pdf. Only Word format worked. The script worked well outside of markdown :-(
+
+# Object of Study
+
+More and more the internet of things enables us to document activities we are
+engaged with in our daily lives. While a lot of data are produced in this manner 
+it is mainly the *quantity* of activities that attracts attention so far. This study 
+deviates from this as our focus of attention will be the *quality* of involved
+activities: How well do participants perform barbell lifts? Available categories
+are classes A, B, C, D, and E.
+
+# Read Training Data
+
+The data from this project come from this source: 
+(http://groupware.les.inf.puc-rio.br/har)  
+We begin with loading the training data.
+
+```{r echo=TRUE, eval=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
+mydata <- read.csv(file = 'pml-training.csv', header = TRUE, 
+                   na.strings=c("", " ","NA")) # read training data
+dim(mydata)
+```
+
+# Missing Values
+
+```{r echo=TRUE, eval=TRUE, results='hide', message=FALSE, warning=FALSE, cache=TRUE}
+nareport <- df_status(mydata)
+mydata2 <- mydata[nareport$variable[nareport$q_na < 19216]]
+mydata2 <- mydata2[,c(2,6:60)]
+dim(mydata2)
+```
+
+The data has dimension 19622 rows * 160 columns.
+However, if we remove all variables that have more than 19215 NAs or empty fields we
+keep but 60 columns. One of these is an id which is also excluded as possible predictor.
+We also exclude three time stamps that seem unrelevant to our research question.
+So we'll keep one criterion (classe) and 55 possible predictors.
+
+# Divide Training Data for Cross Validation
+
+The strategy will be to build a model with 50% of the training data and evaluate this model
+with the remaining 30% of the data. If the predictions are good enough the model will be used to 
+predict the 20 cases of the testing file.
+
+```{r echo=TRUE, eval=TRUE, results='asis', message=FALSE, warning=FALSE, cache=TRUE}
+TrainSplit <- createDataPartition(y=mydata2$classe, p=0.7, list=FALSE)
+Train <- mydata2[TrainSplit,]
+Test <- mydata2[-TrainSplit,]
+```
+
+# Model Construction
+
+We'll be using a random forest to find an acceptable model.
+
+```{r echo=TRUE, eval=TRUE, results='asis', message=FALSE, warning=FALSE, cache=TRUE}
+modFit <- randomForest(classe ~ ., data=Train, method="rf") 
+modFit
+```
+
+# Model Evaluation
+
+```{r echo=TRUE, eval=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
+modPred <- predict(modFit, Test)
+result <- confusionMatrix(modPred, Test$classe)
+print(result)
+```
+
+According to these crossvalidated results the prediction model is working extremely well.
+
+# Read Test Data
+
+Now it's the turn of the real test data.
+
+```{r echo=TRUE, eval=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
+mytestdata <- read.csv(file = 'pml-testing.csv', 
+                       header = TRUE, na.strings=c(""," ","NA")) # read test data
+library(data.table)
+mytestdata2 <- mytestdata[,colnames(mydata2)[-56]] # classe is not available in test data
+```
+
+# Prediction
+
+We'll use our crossvalidated model to forecast group membership.
+
+```{r echo=TRUE, eval=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
+# handle bug in randomForest
+mytestdata2 <- rbind(mydata2[1, -56] , mytestdata2)
+mytestdata2 <- mytestdata2[-1,]
+
+testPred <- predict(modFit, mytestdata2)
+Prediction <- as.data.table(testPred)
+Prediction[,casenum := 1:20]
+library(knitr)
+kable(Prediction)
+```
+
+And that's it!
